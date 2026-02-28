@@ -63,7 +63,7 @@ jobs:
           elif [ "$AGENT_BACKEND" = "claude-code" ]; then
             IMAGE="stephengpope/thepopebot:job-claude-code-${THEPOPEBOT_VERSION}"
           else
-            IMAGE="stephengpope/thepopebot:job-${THEPOPEBOT_VERSION}"
+            IMAGE="stephengpope/thepopebot:job-pi-coding-agent-${THEPOPEBOT_VERSION}"
           fi
           echo "Using image: $IMAGE"
 

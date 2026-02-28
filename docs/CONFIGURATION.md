@@ -59,7 +59,7 @@ Configure in **Settings → Secrets and variables → Actions → Variables**:
 | `APP_URL` | Public URL for the event handler (e.g., `https://mybot.example.com`) | Yes | — |
 | `AUTO_MERGE` | Set to `false` to disable auto-merge of job PRs | No | Enabled |
 | `ALLOWED_PATHS` | Comma-separated path prefixes for auto-merge | No | `/logs` |
-| `JOB_IMAGE_URL` | Docker image path for job agent (e.g., `ghcr.io/myorg/mybot`) | No | `stephengpope/thepopebot:job-${THEPOPEBOT_VERSION}` |
+| `JOB_IMAGE_URL` | Docker image path for job agent (e.g., `ghcr.io/myorg/mybot`) | No | `stephengpope/thepopebot:job-pi-coding-agent-${THEPOPEBOT_VERSION}` |
 | `EVENT_HANDLER_IMAGE_URL` | Docker image path for event handler | No | `stephengpope/thepopebot:event-handler-${THEPOPEBOT_VERSION}` |
 | `RUNS_ON` | GitHub Actions runner label (e.g., `self-hosted`) | No | `ubuntu-latest` |
 | `LLM_PROVIDER` | LLM provider (`anthropic`, `openai`, `google`) | No | `anthropic` |
