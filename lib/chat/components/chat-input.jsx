@@ -3,7 +3,8 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { SendIcon, StopIcon, PaperclipIcon, XIcon, FileTextIcon, MicIcon } from './icons.js';
 import { useVoiceInput } from '../../voice/use-voice-input.js';
-import { getVoiceToken, isVoiceEnabled } from '../../voice/actions.js';
+import { getVoiceToken } from '../../voice/actions.js';
+import { VoiceBars } from './voice-bars.jsx';
 import { cn } from '../utils.js';
 
 const ACCEPTED_TYPES = [
@@ -45,14 +46,12 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
   const [isDragging, setIsDragging] = useState(false);
   const isStreaming = status === 'streaming' || status === 'submitted';
   const voiceStreamRef = useRef(null);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
-
-  useEffect(() => {
-    isVoiceEnabled().then(setVoiceEnabled).catch(() => {});
-  }, []);
+  const volumeRef = useRef(0);
+  const voiceEnabled = process.env.NEXT_PUBLIC_VOICE_ENABLED === 'true';
 
   const { isRecording, startRecording, stopRecording } = useVoiceInput({
     getToken: getVoiceToken,
+    onVolumeChange: (rms) => { volumeRef.current = rms; },
     onTranscript: (text) => {
       // Cancel any in-progress stream
       if (voiceStreamRef.current) clearTimeout(voiceStreamRef.current);
@@ -238,6 +237,8 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
               >
                 <PaperclipIcon size={16} />
               </button>
+
+              {voiceEnabled && <VoiceBars volumeRef={volumeRef} isRecording={isRecording} />}
 
               <input
                 ref={fileInputRef}

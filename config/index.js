@@ -20,6 +20,7 @@ export function withThepopebot(nextConfig = {}) {
     env: {
       ...nextConfig.env,
       NEXT_PUBLIC_CODE_WORKSPACE: process.env.CLAUDE_CODE_OAUTH_TOKEN && process.env.BETA ? 'true' : '',
+      NEXT_PUBLIC_VOICE_ENABLED: process.env.ASSEMBLYAI_API_KEY ? 'true' : '',
     },
     serverExternalPackages: [
       ...(nextConfig.serverExternalPackages || []),

@@ -205,10 +205,14 @@ export async function sync(projectPath) {
     // 5. Build Docker image with patched Dockerfile
     buildDockerImage(projectPath);
 
-    // 6. Restart
+    // 6. Build Next.js on host (avoids OOM inside container)
+    console.log('\n  Building Next.js...');
+    execSync('npm run build', { stdio: 'inherit', cwd: projectPath });
+
+    // 7. Restart container and reload PM2 (picks up .next via volume mount)
     console.log('\n  Restarting event handler...');
     execSync('docker compose up -d -V event-handler', { stdio: 'inherit', cwd: projectPath });
-    execSync('docker compose exec event-handler sh -c "npm run build && pm2 reload all"', {
+    execSync('docker compose exec event-handler pm2 reload all', {
       stdio: 'inherit',
       cwd: projectPath,
     });

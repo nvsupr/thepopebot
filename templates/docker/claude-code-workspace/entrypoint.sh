@@ -18,7 +18,10 @@ cd /home/claude-code/workspace
 
 # Create or checkout feature branch
 if [ -n "$FEATURE_BRANCH" ]; then
-    if git ls-remote --heads origin "$FEATURE_BRANCH" | grep -q .; then
+    if git rev-parse --verify "$FEATURE_BRANCH" >/dev/null 2>&1; then
+        # Branch exists locally (restart case) — just switch to it
+        git checkout "$FEATURE_BRANCH"
+    elif git ls-remote --heads origin "$FEATURE_BRANCH" | grep -q .; then
         # Branch exists on remote (recreation case) — check it out with tracking
         git checkout -b "$FEATURE_BRANCH" "origin/$FEATURE_BRANCH"
     else

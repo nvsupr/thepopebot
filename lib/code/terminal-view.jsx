@@ -49,6 +49,8 @@ export default function TerminalView({ codeWorkspaceId, ensureContainer }) {
   const statusRef = useRef(null);
   const styleRef = useRef(null);
   const toolbarRef = useRef(null);
+  const disconnectedAtRef = useRef(null);
+  const ensuredRef = useRef(false);
   const [connected, setConnected] = useState(false);
   const [containerError, setContainerError] = useState(null);
   const [termTheme, setTermTheme] = useState('dark');
@@ -101,6 +103,9 @@ export default function TerminalView({ codeWorkspaceId, ensureContainer }) {
       const handshake = JSON.stringify({ AuthToken: '', columns: term.cols, rows: term.rows });
       ws.send(handshake);
       setStatus(STATUS.connected);
+      // Reset reconnect state on successful connection
+      disconnectedAtRef.current = null;
+      ensuredRef.current = false;
     };
 
     ws.onmessage = (ev) => {
@@ -122,13 +127,31 @@ export default function TerminalView({ codeWorkspaceId, ensureContainer }) {
 
     ws.onclose = () => {
       setStatus(STATUS.disconnected);
+
+      // Track when disconnection started
+      if (!disconnectedAtRef.current) {
+        disconnectedAtRef.current = Date.now();
+      }
+
+      // Give up after 60s of failed reconnection
+      if (Date.now() - disconnectedAtRef.current > 60_000) {
+        setContainerError('Failed to connect');
+        return;
+      }
+
+      // Call ensureContainer once per disconnect cycle to restart the container
+      if (!ensuredRef.current) {
+        ensuredRef.current = true;
+        ensureContainer(codeWorkspaceId).catch(() => {});
+      }
+
       retryTimer.current = setTimeout(connect, RECONNECT_INTERVAL);
     };
 
     ws.onerror = () => {
       ws.close();
     };
-  }, [codeWorkspaceId, setStatus]);
+  }, [codeWorkspaceId, setStatus, ensureContainer]);
 
   useEffect(() => {
     const saved = localStorage.getItem('terminal-theme') || 'dark';
@@ -244,6 +267,9 @@ export default function TerminalView({ codeWorkspaceId, ensureContainer }) {
   const handleReconnect = async () => {
     clearTimeout(retryTimer.current);
     if (wsRef.current) wsRef.current.close();
+    // Reset reconnect state so the 60s timer starts fresh
+    disconnectedAtRef.current = null;
+    ensuredRef.current = false;
     try {
       setContainerError(null);
       const result = await ensureContainer(codeWorkspaceId);
