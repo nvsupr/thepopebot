@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Streamdown } from 'streamdown';
 import { cn } from '../utils.js';
 import { SpinnerIcon, FileTextIcon, CopyIcon, CheckIcon, RefreshIcon, SquarePenIcon, WrenchIcon, XIcon, ChevronDownIcon } from './icons.js';
+import { getToolDisplayName } from './tool-names.js';
 
 function LinkSafetyModal({ url, isOpen, onClose, onConfirm }) {
   const [copied, setCopied] = useState(false);
@@ -63,20 +64,6 @@ export const linkSafety = {
   enabled: true,
   renderModal: (props) => <LinkSafetyModal {...props} />,
 };
-
-const TOOL_DISPLAY_NAMES = {
-  create_job: 'Create Job',
-  get_job_status: 'Check Job Status',
-  get_system_technical_specs: 'Read Tech Docs',
-  get_skill_building_guide: 'Read Skill Docs',
-  start_coding: 'Start Coding',
-  start_headless_coding: 'Headless Coding',
-  get_repository_details: 'Get Repository Details',
-};
-
-function getToolDisplayName(toolName) {
-  return TOOL_DISPLAY_NAMES[toolName] || toolName.replace(/_/g, ' ');
-}
 
 function formatContent(content) {
   if (content == null) return null;

@@ -3,20 +3,7 @@
 import { useState } from 'react';
 import { WrenchIcon, SpinnerIcon, CheckIcon, XIcon, ChevronDownIcon } from './icons.js';
 import { cn } from '../utils.js';
-
-const TOOL_DISPLAY_NAMES = {
-  create_job: 'Create Job',
-  get_job_status: 'Check Job Status',
-  get_system_technical_specs: 'Read Tech Docs',
-  get_skill_building_guide: 'Read Skill Docs',
-  get_skill_details: 'Get Skill',
-  start_coding: 'Start Coding',
-  get_repository_details: 'Get Repository Details',
-};
-
-function getToolDisplayName(toolName) {
-  return TOOL_DISPLAY_NAMES[toolName] || toolName.replace(/_/g, ' ');
-}
+import { getToolDisplayName } from './tool-names.js';
 
 function formatContent(content) {
   if (content == null) return null;
