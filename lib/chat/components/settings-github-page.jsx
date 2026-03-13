@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { CheckIcon, PlusIcon, KeyIcon } from './icons.js';
+import { CheckIcon, PlusIcon, KeyIcon, TrashIcon } from './icons.js';
 import {
   getGitHubConfig,
   updateGitHubSecret,
   updateGitHubVariable,
+  deleteGitHubSecretAction,
+  deleteGitHubVariableAction,
   getApiKeySettings,
   updateApiKeySetting,
   regenerateWebhookSecret,
@@ -60,12 +62,22 @@ const GROUP_ORDER = ['non-agent', 'agent', 'llm'];
 // Shared row components
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SecretRow({ name, helpText, onUpdate }) {
+function SecretRow({ name, helpText, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete secret ${name}?`)) return;
+    setDeleting(true);
+    setError(null);
+    const result = await onDelete(name);
+    setDeleting(false);
+    if (result?.error) setError(result.error);
+  };
 
   const handleSave = async () => {
     if (!value) return;
@@ -119,23 +131,41 @@ function SecretRow({ name, helpText, onUpdate }) {
       <div className="min-w-0">
         <div className="text-sm font-medium font-mono">{name}</div>
         {helpText && <p className="text-xs text-muted-foreground mt-0.5">{helpText}</p>}
+        {error && <p className="text-xs text-destructive mt-0.5">{error}</p>}
       </div>
-      <button onClick={() => setEditing(true)}
-        className={`rounded-md px-2.5 py-1.5 text-xs font-medium border shrink-0 self-start ${
-          saved ? 'border-green-500 text-green-600' : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
-        }`}>
-        {saved ? <span className="inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span> : 'Set'}
-      </button>
+      <div className="flex items-center gap-1.5 shrink-0 self-start">
+        <button onClick={() => setEditing(true)}
+          className={`rounded-md px-2.5 py-1.5 text-xs font-medium border ${
+            saved ? 'border-green-500 text-green-600' : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+          }`}>
+          {saved ? <span className="inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span> : 'Set'}
+        </button>
+        <button onClick={handleDelete} disabled={deleting}
+          className="rounded-md p-1.5 text-xs border border-border text-muted-foreground hover:text-destructive hover:border-destructive disabled:opacity-50"
+          title="Delete secret">
+          <TrashIcon size={12} />
+        </button>
+      </div>
     </div>
   );
 }
 
-function VariableRow({ name, onUpdate }) {
+function VariableRow({ name, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete variable ${name}?`)) return;
+    setDeleting(true);
+    setError(null);
+    const result = await onDelete(name);
+    setDeleting(false);
+    if (result?.error) setError(result.error);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -176,13 +206,23 @@ function VariableRow({ name, onUpdate }) {
 
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between py-3">
-      <div className="text-sm font-medium font-mono">{name}</div>
-      <button onClick={() => setEditing(true)}
-        className={`rounded-md px-2.5 py-1.5 text-xs font-medium border shrink-0 self-start sm:self-auto ${
-          saved ? 'border-green-500 text-green-600' : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
-        }`}>
-        {saved ? <span className="inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span> : 'Set'}
-      </button>
+      <div className="min-w-0">
+        <div className="text-sm font-medium font-mono">{name}</div>
+        {error && <p className="text-xs text-destructive mt-0.5">{error}</p>}
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
+        <button onClick={() => setEditing(true)}
+          className={`rounded-md px-2.5 py-1.5 text-xs font-medium border ${
+            saved ? 'border-green-500 text-green-600' : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+          }`}>
+          {saved ? <span className="inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span> : 'Set'}
+        </button>
+        <button onClick={handleDelete} disabled={deleting}
+          className="rounded-md p-1.5 text-xs border border-border text-muted-foreground hover:text-destructive hover:border-destructive disabled:opacity-50"
+          title="Delete variable">
+          <TrashIcon size={12} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -403,9 +443,11 @@ function AddVariableDialog({ open, onAdd, onCancel }) {
 function useGitHubConfig() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [key, setKey] = useState(0);
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
       try {
         const result = await getGitHubConfig();
         setData(result);
@@ -415,9 +457,11 @@ function useGitHubConfig() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [key]);
 
-  return { data, loading };
+  const reload = () => setKey((k) => k + 1);
+
+  return { data, loading, reload };
 }
 
 function NotConfigured() {
@@ -593,7 +637,7 @@ export function GitHubTokensPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function GitHubSecretsPage() {
-  const { data, loading } = useGitHubConfig();
+  const { data, loading, reload } = useGitHubConfig();
   const [showAdd, setShowAdd] = useState(false);
 
   if (loading) {
@@ -604,6 +648,12 @@ export function GitHubSecretsPage() {
 
   const handleUpdate = async (name, value) => {
     return await updateGitHubSecret(name, value);
+  };
+
+  const handleDelete = async (name) => {
+    const result = await deleteGitHubSecretAction(name);
+    if (result?.success) reload();
+    return result;
   };
 
   // Group secrets by type
@@ -648,7 +698,7 @@ export function GitHubSecretsPage() {
               <div className="rounded-lg border bg-card p-4">
                 <div className="divide-y divide-border">
                   {secrets.map((s) => (
-                    <SecretRow key={s.name} name={s.name} helpText={getSecretHelp(s.name)} onUpdate={handleUpdate} />
+                    <SecretRow key={s.name} name={s.name} helpText={getSecretHelp(s.name)} onUpdate={handleUpdate} onDelete={handleDelete} />
                   ))}
                 </div>
               </div>
@@ -665,7 +715,7 @@ export function GitHubSecretsPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function GitHubVariablesPage() {
-  const { data, loading } = useGitHubConfig();
+  const { data, loading, reload } = useGitHubConfig();
   const [showAdd, setShowAdd] = useState(false);
 
   if (loading) {
@@ -676,6 +726,12 @@ export function GitHubVariablesPage() {
 
   const handleUpdate = async (name, value) => {
     return await updateGitHubVariable(name, value);
+  };
+
+  const handleDelete = async (name) => {
+    const result = await deleteGitHubVariableAction(name);
+    if (result?.success) reload();
+    return result;
   };
 
   return (
@@ -702,7 +758,7 @@ export function GitHubVariablesPage() {
       <div className="rounded-lg border bg-card p-4">
         <div className="divide-y divide-border">
           {data.variables.map((v) => (
-            <VariableRow key={v.name} name={v.name} onUpdate={handleUpdate} />
+            <VariableRow key={v.name} name={v.name} onUpdate={handleUpdate} onDelete={handleDelete} />
           ))}
         </div>
       </div>
