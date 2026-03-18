@@ -410,7 +410,7 @@ function ProviderCard({ name, slug, credentials, credentialStatuses, onUpdateCre
 function OAuthTokenList() {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
   const [newName, setNewName] = useState('');
   const [newToken, setNewToken] = useState('');
   const [creating, setCreating] = useState(false);
@@ -419,7 +419,7 @@ function OAuthTokenList() {
 
   const loadTokens = async () => {
     try {
-      const result = await getOAuthTokens();
+      const result = await getOAuthTokens('claudeCode');
       setTokens(Array.isArray(result) ? result : []);
     } catch {
       // ignore
@@ -437,13 +437,13 @@ function OAuthTokenList() {
     setCreating(true);
     setError(null);
     try {
-      const result = await createOAuthToken(newName.trim(), newToken.trim());
+      const result = await createOAuthToken('claudeCode', newName.trim(), newToken.trim());
       if (result.error) {
         setError(result.error);
       } else {
         setNewName('');
         setNewToken('');
-        setShowCreateForm(false);
+        setShowDialog(false);
         await loadTokens();
       }
     } catch {
@@ -468,6 +468,13 @@ function OAuthTokenList() {
     }
   };
 
+  const closeDialog = () => {
+    setShowDialog(false);
+    setNewName('');
+    setNewToken('');
+    setError(null);
+  };
+
   if (loading) {
     return <div className="h-16 animate-pulse rounded-md bg-border/50" />;
   }
@@ -479,22 +486,19 @@ function OAuthTokenList() {
           <span className="text-sm font-medium">OAuth Tokens</span>
           <p className="text-xs text-muted-foreground">For Claude Code CLI containers (Pro/Max subscription)</p>
         </div>
-        {!showCreateForm && (
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground shrink-0 transition-colors"
-          >
-            <PlusIcon size={14} />
-            Add token
-          </button>
-        )}
+        <button
+          onClick={() => setShowDialog(true)}
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground shrink-0 transition-colors"
+        >
+          <PlusIcon size={14} />
+          Add token
+        </button>
       </div>
 
-      {error && <p className="text-sm text-destructive mb-2">{error}</p>}
-
-      {showCreateForm && (
-        <div className="rounded-lg border border-dashed bg-card p-4 mb-2">
-          <div className="space-y-2">
+      {showDialog && (
+        <Dialog open onClose={closeDialog} title="Add OAuth Token">
+          {error && <p className="text-sm text-destructive mb-3">{error}</p>}
+          <div className="space-y-3">
             <div>
               <label className="text-xs font-medium mb-1 block">Name</label>
               <input
@@ -517,23 +521,23 @@ function OAuthTokenList() {
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
             </div>
-            <div className="flex items-center gap-2 justify-end">
-              <button
-                onClick={() => { setShowCreateForm(false); setNewName(''); setNewToken(''); }}
-                className="rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={!newName.trim() || !newToken.trim() || creating}
-                className="rounded-md px-2.5 py-1.5 text-xs font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
-              >
-                {creating ? 'Adding...' : 'Add'}
-              </button>
-            </div>
           </div>
-        </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={closeDialog}
+              className="rounded-md px-3 py-1.5 text-sm font-medium border border-border text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={!newName.trim() || !newToken.trim() || creating}
+              className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+            >
+              {creating ? 'Adding...' : 'Add'}
+            </button>
+          </div>
+        </Dialog>
       )}
 
       {tokens.length > 0 ? (
@@ -566,11 +570,11 @@ function OAuthTokenList() {
             ))}
           </div>
         </div>
-      ) : !showCreateForm && (
+      ) : (
         <EmptyState
           message="No OAuth tokens configured"
           actionLabel="Add OAuth token"
-          onAction={() => setShowCreateForm(true)}
+          onAction={() => setShowDialog(true)}
         />
       )}
     </div>
