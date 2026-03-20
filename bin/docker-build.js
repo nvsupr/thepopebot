@@ -69,6 +69,16 @@ const IMAGES = [
     context: 'docker/coding-agent',
     dockerfile: 'docker/coding-agent/Dockerfile.opencode',
   },
+  {
+    name: 'coding-agent-claude-code',
+    context: 'docker/coding-agent',
+    dockerfile: 'docker/coding-agent/Dockerfile.claude-code',
+  },
+  {
+    name: 'coding-agent-pi-coding-agent',
+    context: 'docker/coding-agent',
+    dockerfile: 'docker/coding-agent/Dockerfile.pi-coding-agent',
+  },
 ];
 
 // Parse --image flag

@@ -88,13 +88,11 @@ RUN useradd -m -s /bin/bash coding-agent \
 # Copy scripts, commands, and configs
 # ──────────────────────────────────────────────
 COPY scripts/ /scripts/
-COPY commands/ /home/coding-agent/.claude/commands/
 COPY .tmux.conf /home/coding-agent/.tmux.conf
 COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \
     && chmod +x /scripts/**/*.sh \
-    && chown -R coding-agent:coding-agent /home/coding-agent/.claude \
     && chown coding-agent:coding-agent /home/coding-agent/.tmux.conf
 
 # ──────────────────────────────────────────────
@@ -103,7 +101,7 @@ RUN chmod +x /entrypoint.sh \
 USER coding-agent
 WORKDIR /home/coding-agent/workspace
 
-# RUNTIME: job | headless | workspace | cluster-worker
+# RUNTIME: job | headless | interactive | cluster-worker | command/*
 ENV RUNTIME=""
 
 ENTRYPOINT ["/entrypoint.sh"]

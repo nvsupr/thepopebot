@@ -28,6 +28,19 @@ Everything in the **agents** and **headless runtime** layers is complete:
 
 ---
 
+## Done: Command Runtimes
+
+| Component | Status |
+|-----------|--------|
+| **command/commit-to-main/** | Done — 6 scripts (setup-git, auth, setup, git-add, agent-run, push) |
+| **command/create-pr/** | Done — 5 scripts (setup-git, auth, setup, push, agent-run). DRAFT=1 for draft PR. |
+| **command/rebase/** | Done — 4 scripts (setup-git, auth, setup, rebase with agent conflict resolution) |
+| **Server action** | Done — `runWorkspaceCommand()` in `lib/code/actions.js` |
+| **Docker function** | Done — `runWorkspaceCommandContainer()` + `volumeExists()` in `lib/tools/docker.js` |
+| **UI** | Done — Split button in chat branch bar (`code-mode-toggle.jsx`) |
+
+---
+
 ## Remaining: Runtime Scripts
 
 ### job/

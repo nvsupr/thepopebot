@@ -11,7 +11,7 @@ set -e
 #
 # ── REQUIRED ─────────────────────────────────────────────────────────
 #
-#   RUNTIME             job | headless | interactive | cluster-worker
+#   RUNTIME             job | headless | interactive | cluster-worker | command/*
 #                       Selects the script folder: /scripts/${RUNTIME}/
 #
 #   AGENT               claude-code | pi | gemini | codex | opencode
@@ -70,7 +70,7 @@ set -e
 # ══════════════════════════════════════════════════════════════════════
 
 if [ -z "$RUNTIME" ]; then
-    echo "ERROR: RUNTIME env var is required (job, headless, interactive, cluster-worker)"
+    echo "ERROR: RUNTIME env var is required (job, headless, interactive, cluster-worker, command/*)"
     exit 1
 fi
 

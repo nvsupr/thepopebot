@@ -1,10 +1,18 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { GitBranchIcon } from './icons.js';
+import { GitBranchIcon, ChevronDownIcon, SpinnerIcon } from './icons.js';
 import { Combobox } from './ui/combobox.js';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from './ui/dropdown-menu.js';
 import { cn } from '../utils.js';
 import { useFeatures } from './features-context.js';
+
+const COMMAND_LABELS = {
+  'create-pr': 'Create PR',
+  'draft-pr': 'Create draft PR',
+  'commit-to-main': 'Commit to main',
+  'rebase': 'Rebase branch',
+};
 
 /**
  * Code mode toggle with repo/branch pickers.
@@ -22,6 +30,8 @@ import { useFeatures } from './features-context.js';
  * @param {Function} props.getBranches - Server action to fetch branches
  * @param {object} [props.workspace] - Workspace object (id, repo, branch, containerName, featureBranch)
  * @param {boolean} [props.isInteractiveActive] - Whether interactive container is running
+ * @param {object} [props.diffStats] - Diff stats ({ insertions, deletions })
+ * @param {Function} [props.onDiffStatsRefresh] - Callback to refresh diff stats
  * @param {Function} [props.onWorkspaceUpdate] - Callback to refresh workspace state after mode toggle
  */
 export function CodeModeToggle({
@@ -36,6 +46,8 @@ export function CodeModeToggle({
   getBranches,
   workspace,
   isInteractiveActive,
+  diffStats,
+  onDiffStatsRefresh,
   onWorkspaceUpdate,
 }) {
   const features = useFeatures();
@@ -111,9 +123,9 @@ export function CodeModeToggle({
     const repoName = repo ? repo.split('/').pop() : '';
 
     return (
-      <div className="flex items-center gap-2 text-sm min-w-0 px-1 py-0.5">
+      <div className="flex items-center gap-2 text-xs min-w-0 px-1 py-0.5">
         <div className="flex items-center gap-1.5 text-muted-foreground min-w-0 overflow-hidden">
-          <GitBranchIcon size={14} className="shrink-0" />
+          <GitBranchIcon size={12} className="shrink-0" />
           {repoName && <span className="shrink-0 cursor-default" title={repo}>{repoName}</span>}
           {branch && (
             <>
@@ -128,6 +140,7 @@ export function CodeModeToggle({
             </>
           )}
         </div>
+        {workspace?.id && <WorkspaceCommandButton workspaceId={workspace.id} diffStats={diffStats} onDiffStatsRefresh={onDiffStatsRefresh} />}
       </div>
     );
   }
@@ -195,6 +208,90 @@ export function CodeModeToggle({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function WorkspaceCommandButton({ workspaceId, diffStats, onDiffStatsRefresh }) {
+  const [selectedCommand, setSelectedCommand] = useState('create-pr');
+  const [commandRunning, setCommandRunning] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleRun = useCallback(async () => {
+    if (commandRunning) return;
+    setCommandRunning(true);
+    setErrorMessage('');
+    try {
+      const { runWorkspaceCommand } = await import('../../code/actions.js');
+      const result = await runWorkspaceCommand(workspaceId, selectedCommand);
+      if (!result.success) {
+        setErrorMessage(result.message || 'Command failed');
+      }
+      onDiffStatsRefresh?.();
+    } catch (err) {
+      setErrorMessage(err.message || 'Command failed');
+    } finally {
+      setCommandRunning(false);
+    }
+  }, [workspaceId, selectedCommand, commandRunning]);
+
+  return (
+    <div className="ml-auto flex items-center">
+      {errorMessage && (
+        <span className="text-xs text-destructive mr-2 truncate max-w-[160px]" title={errorMessage}>
+          {errorMessage}
+        </span>
+      )}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-xs leading-4 px-2.5 h-[28px] flex items-center font-medium border border-border rounded-md whitespace-nowrap">
+          <span className="text-green-500">+{diffStats?.insertions ?? 0}</span>
+          {' '}
+          <span className="text-destructive">-{diffStats?.deletions ?? 0}</span>
+        </span>
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={handleRun}
+            disabled={commandRunning}
+            className="text-xs leading-4 px-2.5 h-[28px] font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors rounded-l-md disabled:opacity-50"
+          >
+            {commandRunning ? (
+              <span className="flex items-center gap-1.5">
+                <SpinnerIcon size={12} className="animate-spin" />
+                Running...
+              </span>
+            ) : (
+              COMMAND_LABELS[selectedCommand]
+            )}
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <button
+                type="button"
+                disabled={commandRunning}
+                className="text-xs leading-4 px-1.5 h-[28px] font-medium border border-border border-l-0 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors rounded-r-md disabled:opacity-50 flex items-center"
+              >
+                <ChevronDownIcon size={14} />
+              </button>
+            </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end" className="whitespace-nowrap">
+            <DropdownMenuItem onClick={() => setSelectedCommand('create-pr')}>
+              Create PR
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setSelectedCommand('draft-pr')}>
+              Create draft PR
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setSelectedCommand('commit-to-main')}>
+              Commit to main
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setSelectedCommand('rebase')}>
+              Rebase branch
+            </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
     </div>
   );
 }

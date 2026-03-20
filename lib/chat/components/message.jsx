@@ -85,9 +85,18 @@ function ToolCall({ part, className }) {
   const displayName = isUnknown ? 'Unknown Event' : getToolDisplayName(toolName);
   const state = part.state || 'input-available';
 
+  // Detect tool-level failure: output is valid JSON with success: false
+  const hasOutputError = (() => {
+    if (state !== 'output-available' || !part.output) return false;
+    try {
+      const parsed = typeof part.output === 'string' ? JSON.parse(part.output) : part.output;
+      return parsed?.success === false;
+    } catch { return false; }
+  })();
+
   const isRunning = !isUnknown && (state === 'input-streaming' || state === 'input-available');
-  const isDone = !isUnknown && state === 'output-available';
-  const isError = state === 'output-error';
+  const isDone = !isUnknown && state === 'output-available' && !hasOutputError;
+  const isError = state === 'output-error' || hasOutputError;
 
   // Auto-redirect when start_coding completes successfully.
   // mountedDone captures whether the tool was already finished when the component

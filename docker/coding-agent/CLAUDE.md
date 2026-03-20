@@ -3,7 +3,7 @@
 ## Architecture
 
 Two axes, both selected at runtime:
-- **`RUNTIME`** — the workflow (job, headless, interactive, cluster-worker)
+- **`RUNTIME`** — the workflow (job, headless, interactive, cluster-worker, command/*)
 - **`AGENT`** — the coding agent (claude-code, pi, gemini, etc.)
 
 Base image (`Dockerfile`) has everything shared. Per-agent images extend it:
@@ -28,13 +28,31 @@ headless/5_agent-setup.sh     → source agents/${AGENT}/setup.sh (agent-specifi
 headless/6_agent-run.sh       → source agents/${AGENT}/run.sh   (agent-specific)
 ```
 
+### Command Runtimes
+
+`command/*` runtimes are ephemeral containers that run workspace commands on an existing volume. They don't clone — the workspace already exists.
+
+| Runtime | Purpose |
+|---------|---------|
+| `command/commit-to-main` | Stage all changes, generate commit message via agent, push |
+| `command/create-pr` | Push feature branch, generate PR title+body via agent. Set `DRAFT=1` for draft PR. |
+| `command/rebase` | Fetch and rebase onto base branch. Agent resolves conflicts if any. |
+
+```
+command/create-pr/1_setup-git.sh     → source common/setup-git.sh
+command/create-pr/2_agent-auth.sh    → source agents/${AGENT}/auth.sh
+command/create-pr/3_agent-setup.sh   → source agents/${AGENT}/setup.sh
+command/create-pr/4_push.sh          → git push -u origin $FEATURE_BRANCH
+command/create-pr/5_agent-run.sh     → source agents/${AGENT}/run.sh (PROMPT: create PR)
+```
+
 ## Env Vars
 
 ### Required
 
 | Variable | Values | Purpose |
 |----------|--------|---------|
-| `RUNTIME` | `job`, `headless`, `interactive`, `cluster-worker` | Selects workflow script folder |
+| `RUNTIME` | `job`, `headless`, `interactive`, `cluster-worker`, `command/*` | Selects workflow script folder |
 | `AGENT` | `claude-code`, `pi`, `gemini` | Set by per-agent Dockerfile (not passed at runtime) |
 
 ### Git / Repo
@@ -42,10 +60,10 @@ headless/6_agent-run.sh       → source agents/${AGENT}/run.sh   (agent-specifi
 | Variable | Used by | Purpose |
 |----------|---------|---------|
 | `GH_TOKEN` | all | GitHub CLI auth |
-| `REPO` | headless, interactive | GitHub `owner/repo` slug |
+| `REPO` | headless, interactive, command/* | GitHub `owner/repo` slug |
 | `REPO_URL` | job | Full git clone URL (includes token) |
-| `BRANCH` | job, headless, interactive | Base branch (default: main) |
-| `FEATURE_BRANCH` | headless, interactive | Feature branch to create/checkout. If empty, skips branching and pushing. |
+| `BRANCH` | job, headless, interactive, command/* | Base branch (default: main) |
+| `FEATURE_BRANCH` | headless, interactive, command/* | Feature branch to create/checkout. If empty, skips branching and pushing. |
 
 ### Agent Task
 

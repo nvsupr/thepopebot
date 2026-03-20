@@ -2,23 +2,37 @@
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react';
 import { Messages } from './messages.js';
 import { ChatInput } from './chat-input.js';
 import { ChatHeader } from './chat-header.js';
 import { Greeting } from './greeting.js';
 import { CodeModeToggle } from './code-mode-toggle.js';
-import { getRepositories, getBranches } from '../actions.js';
+import { getRepositories, getBranches, getWorkspaceDiffStats } from '../actions.js';
 
 export function Chat({ chatId, initialMessages = [], workspace = null }) {
   const [input, setInput] = useState('');
   const [files, setFiles] = useState([]);
   const hasNavigated = useRef(false);
   const [codeMode, setCodeMode] = useState(!!workspace);
-  const [codeModeType, setCodeModeType] = useState('plan');
+  const [codeModeType, setCodeModeType] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`codeModeType:${chatId}`);
+      if (stored === 'plan' || stored === 'code') return stored;
+    }
+    return 'code';
+  });
+
+  // Persist codeModeType to localStorage per chat
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`codeModeType:${chatId}`, codeModeType);
+    }
+  }, [chatId, codeModeType]);
   const [repo, setRepo] = useState(workspace?.repo || '');
   const [branch, setBranch] = useState(workspace?.branch || '');
   const [workspaceState, setWorkspaceState] = useState(workspace);
+  const [diffStats, setDiffStats] = useState(null);
 
   // Auto-forward to interactive workspace — only on toggle, not on mount
   const hasMounted = useRef(false);
@@ -63,6 +77,18 @@ export function Chat({ chatId, initialMessages = [], workspace = null }) {
     transport,
     onError: (err) => console.error('Chat error:', err),
   });
+
+  // Fetch diff stats when AI finishes responding (status → 'ready')
+  const [, startDiffTransition] = useTransition();
+  const prevStatus = useRef(status);
+  useEffect(() => {
+    if (prevStatus.current !== 'ready' && status === 'ready' && workspaceState?.id) {
+      startDiffTransition(() => {
+        getWorkspaceDiffStats(workspaceState.id).then(r => { if (r.success) setDiffStats(r); });
+      });
+    }
+    prevStatus.current = status;
+  }, [status, workspaceState?.id]);
 
   // After first message sent, update URL and notify sidebar
   useEffect(() => {
@@ -184,6 +210,14 @@ export function Chat({ chatId, initialMessages = [], workspace = null }) {
       getBranches={getBranches}
       workspace={workspaceState}
       isInteractiveActive={isInteractiveActive}
+      diffStats={diffStats}
+      onDiffStatsRefresh={() => {
+        if (workspaceState?.id) {
+          startDiffTransition(() => {
+            getWorkspaceDiffStats(workspaceState.id).then(r => { if (r.success) setDiffStats(r); });
+          });
+        }
+      }}
       onWorkspaceUpdate={(containerName) => {
         setWorkspaceState(prev => ({ ...prev, containerName }));
       }}
