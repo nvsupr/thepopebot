@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { cn } from '../utils.js';
 import { useFeatures } from './features-context.js';
 
-const COMMAND_LABELS = {
+export const COMMAND_LABELS = {
   'commit': 'Commit Branch',
   'push': 'Push Branch',
   'create-pr': 'Create PR',
@@ -243,7 +243,7 @@ export function CodeModeToggle({
   );
 }
 
-function CommandOutputDialog({ title, output, exitCode, running, onClose }) {
+export function CommandOutputDialog({ title, output, exitCode, running, onClose }) {
   const outputRef = useRef(null);
 
   useEffect(() => {

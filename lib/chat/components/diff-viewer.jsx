@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { html as diff2html, parse as diff2htmlParse } from 'diff2html';
+import 'diff2html/bundles/css/diff2html.min.css';
 
 /**
  * Diff viewer overlay — two-panel layout with file list on left, unified diff on right.
@@ -75,7 +76,7 @@ export function DiffViewer({ workspaceId, diffStats, onClose }) {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-background rounded-xl border border-border overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-background border border-border overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
@@ -140,10 +141,15 @@ export function DiffViewer({ workspaceId, diffStats, onClose }) {
             </div>
           )}
           {diffHtml && (
-            <div
-              className="diff-viewer-content p-4"
-              dangerouslySetInnerHTML={{ __html: diffHtml }}
-            />
+            <>
+              <style>{`
+                .diff-viewer-content .d2h-diff-table tr { position: relative; }
+              `}</style>
+              <div
+                className="diff-viewer-content p-4"
+                dangerouslySetInnerHTML={{ __html: diffHtml }}
+              />
+            </>
           )}
         </div>
       </div>

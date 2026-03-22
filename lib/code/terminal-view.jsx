@@ -7,7 +7,11 @@ import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import '@xterm/xterm/css/xterm.css';
-import { SpinnerIcon } from '../chat/components/icons.js';
+import { SpinnerIcon, MicIcon } from '../chat/components/icons.js';
+import { COMMAND_LABELS, CommandOutputDialog } from '../chat/components/code-mode-toggle.js';
+import { useVoiceInput } from '../voice/use-voice-input.js';
+import { getVoiceToken } from '../voice/actions.js';
+import { VoiceBars } from '../chat/components/voice-bars.js';
 
 const STATUS = { connected: '#22c55e', connecting: '#eab308', disconnected: '#ef4444' };
 const RECONNECT_INTERVAL = 3000;
@@ -40,7 +44,7 @@ function resolveTheme(mode) {
 
 const THEME_CYCLE = ['dark', 'light', 'system'];
 
-export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true, showToolbar = true, ensureContainer, onCloseSession, closeLabel = 'Close Session' }) {
+export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true, showToolbar = true, ensureContainer, onCloseSession, closeLabel = 'Close Session', diffStats, onDiffStatsRefresh, onShowDiff, onTerminalOutput }) {
   const containerRef = useRef(null);
   const termRef = useRef(null);
   const fitAddonRef = useRef(null);
@@ -54,6 +58,22 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
   const [connected, setConnected] = useState(false);
   const [containerError, setContainerError] = useState(null);
   const [termTheme, setTermTheme] = useState('dark');
+  const [voiceDialogOpen, setVoiceDialogOpen] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const voiceDialogRef = useRef(null);
+  const volumeRef = useRef(0);
+
+  const { voiceAvailable, isConnecting, isRecording, startRecording, stopRecording } = useVoiceInput({
+    getToken: getVoiceToken,
+    onVolumeChange: (rms) => { volumeRef.current = rms; },
+    onTranscript: (text) => {
+      setVoiceText((prev) => {
+        const needsSpace = prev && !prev.endsWith(' ');
+        return prev + (needsSpace ? ' ' : '') + text;
+      });
+    },
+    onError: (err) => console.error('[voice]', err),
+  });
 
   const setStatus = useCallback((color) => {
     if (statusRef.current) statusRef.current.style.backgroundColor = color;
@@ -84,6 +104,7 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
       toolbarRef.current.style.setProperty('--tb-color', tb.color);
       toolbarRef.current.style.setProperty('--tb-border', tb.border);
       toolbarRef.current.style.setProperty('--tb-hover', tb.hoverColor);
+      toolbarRef.current.style.setProperty('--tb-dropup-bg', theme.background);
     }
   }, []);
 
@@ -117,6 +138,7 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
       switch (type) {
         case '0':
           term.write(payload);
+          onTerminalOutput?.();
           break;
         case '1':
           // Ignore terminal title changes — global page title is set by layout
@@ -194,6 +216,7 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
       toolbarRef.current.style.setProperty('--tb-color', tb.color);
       toolbarRef.current.style.setProperty('--tb-border', tb.border);
       toolbarRef.current.style.setProperty('--tb-hover', tb.hoverColor);
+      toolbarRef.current.style.setProperty('--tb-dropup-bg', theme.background);
     }
 
     fitAddon.fit();
@@ -313,6 +336,41 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
     });
   }, [applyTheme]);
 
+  const openVoiceDialog = useCallback(() => {
+    setVoiceDialogOpen(true);
+    startRecording();
+  }, [startRecording]);
+
+  const closeVoiceDialog = useCallback(() => {
+    setVoiceDialogOpen(false);
+    if (isRecording) stopRecording();
+  }, [isRecording, stopRecording]);
+
+  const handleVoiceSubmit = useCallback(() => {
+    const text = voiceText.trim();
+    if (text) sendCommand(text);
+    setVoiceText('');
+    closeVoiceDialog();
+  }, [voiceText, sendCommand, closeVoiceDialog]);
+
+  // Close voice dialog on outside click
+  useEffect(() => {
+    if (!voiceDialogOpen) return;
+    const handler = (e) => {
+      if (voiceDialogRef.current && !voiceDialogRef.current.contains(e.target)) closeVoiceDialog();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [voiceDialogOpen, closeVoiceDialog]);
+
+  // Close voice dialog on Escape
+  useEffect(() => {
+    if (!voiceDialogOpen) return;
+    const handler = (e) => { if (e.key === 'Escape') closeVoiceDialog(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [voiceDialogOpen, closeVoiceDialog]);
+
   const themeIcon = termTheme === 'light' ? (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <circle cx="8" cy="8" r="3" />
@@ -370,15 +428,69 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
         .code-toolbar-btn svg {
           flex-shrink: 0;
         }
-        .code-toolbar-btn--commit:hover {
+        .code-toolbar-btn--diff:hover {
           border-color: rgba(115,218,149,0.3);
           color: #73da95;
           background: rgba(115,218,149,0.08);
         }
-        .code-toolbar-btn--merge:hover {
+        .code-toolbar-btn--command:hover {
           border-color: rgba(122,162,247,0.3);
           color: #7aa2f7;
           background: rgba(122,162,247,0.08);
+        }
+        .code-toolbar-btn--command-chevron {
+          display: inline-flex;
+          align-items: center;
+          background: transparent;
+          border: 1px solid var(--tb-border, rgba(169,177,214,0.15));
+          border-left: none;
+          color: var(--tb-color, #787c99);
+          padding: 5px 6px;
+          border-radius: 0 6px 6px 0;
+          cursor: pointer;
+          font-size: 12px;
+          transition: all 0.15s ease;
+          line-height: 1;
+        }
+        .code-toolbar-btn--command-chevron:hover {
+          border-color: rgba(122,162,247,0.3);
+          color: #7aa2f7;
+          background: rgba(122,162,247,0.08);
+        }
+        .code-toolbar-dropup {
+          position: absolute;
+          bottom: 100%;
+          right: 0;
+          margin-bottom: 4px;
+          background: var(--tb-dropup-bg, #1a1b26);
+          border: 1px solid var(--tb-border, rgba(169,177,214,0.15));
+          border-radius: 6px;
+          padding: 4px 0;
+          min-width: 160px;
+          z-index: 50;
+          box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+        }
+        .code-toolbar-dropup-item {
+          display: block;
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: none;
+          color: var(--tb-color, #787c99);
+          padding: 6px 12px;
+          font-size: 12px;
+          font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+          cursor: pointer;
+          transition: all 0.1s ease;
+        }
+        .code-toolbar-dropup-item:hover {
+          color: #7aa2f7;
+          background: rgba(122,162,247,0.08);
+        }
+        .code-toolbar-dropup-separator {
+          height: 1px;
+          background: var(--tb-border, rgba(169,177,214,0.15));
+          margin: 4px 0;
         }
         .code-toolbar-btn--reconnect:hover {
           color: var(--tb-hover, #a9b1d6);
@@ -392,6 +504,130 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
           border-color: rgba(239,68,68,0.3);
           color: #ef4444;
           background: rgba(239,68,68,0.08);
+        }
+        .code-toolbar-btn--voice:hover {
+          border-color: rgba(224,151,110,0.3);
+          color: #e0976e;
+          background: rgba(224,151,110,0.08);
+        }
+        .code-toolbar-btn--voice-active {
+          border-color: rgba(239,68,68,0.4) !important;
+          color: #ef4444 !important;
+          background: rgba(239,68,68,0.12) !important;
+        }
+        .code-voice-dialog {
+          position: absolute;
+          bottom: 100%;
+          right: 0;
+          margin-bottom: 4px;
+          background: var(--tb-dropup-bg, #1a1b26);
+          border: 1px solid var(--tb-border, rgba(169,177,214,0.15));
+          border-radius: 10px;
+          padding: 14px;
+          width: 420px;
+          z-index: 50;
+          box-shadow: 0 -6px 24px rgba(0,0,0,0.4);
+        }
+        @media (max-width: 767px) {
+          .code-voice-dialog {
+            position: fixed;
+            top: 60px;
+            left: 8px;
+            right: 8px;
+            bottom: 60px;
+            width: auto;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+          }
+          .code-voice-dialog textarea {
+            flex: 1;
+            min-height: 0;
+          }
+        }
+        .code-voice-dialog textarea {
+          width: 100%;
+          background: transparent;
+          border: 1px solid var(--tb-border, rgba(169,177,214,0.15));
+          border-radius: 6px;
+          color: var(--tb-hover, #a9b1d6);
+          font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+          font-size: 14px;
+          padding: 10px;
+          resize: none;
+          outline: none;
+          line-height: 1.5;
+        }
+        .code-voice-dialog textarea:focus {
+          border-color: rgba(224,151,110,0.4);
+        }
+        .code-voice-dialog-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-top: 10px;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+        .code-voice-submit {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: transparent;
+          border: 1px solid rgba(115,218,149,0.3);
+          color: #73da95;
+          padding: 5px 14px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 12px;
+          font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+          font-weight: 500;
+          transition: all 0.15s ease;
+          line-height: 1;
+        }
+        .code-voice-submit:hover {
+          background: rgba(115,218,149,0.08);
+          color: #73da95;
+        }
+        .code-voice-submit:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+        .code-voice-mic {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 6px;
+          border: 1px solid var(--tb-border, rgba(169,177,214,0.15));
+          background: transparent;
+          color: var(--tb-color, #787c99);
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .code-voice-mic:hover {
+          color: var(--tb-hover, #a9b1d6);
+        }
+        .code-voice-mic--recording {
+          background: #ef4444;
+          border-color: #ef4444;
+          color: white;
+        }
+        .code-voice-mic--recording:hover {
+          background: #dc2626;
+          border-color: #dc2626;
+          color: white;
+        }
+        .code-voice-mic--connecting {
+          opacity: 0.5;
+          cursor: wait;
+          animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; }
         }
       `}</style>
 
@@ -450,28 +686,55 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
               </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                className="code-toolbar-btn code-toolbar-btn--commit"
-                onClick={() => sendCommand('/commit-changes')}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <circle cx="8" cy="8" r="3" />
-                  <line x1="8" y1="1" x2="8" y2="5" />
-                  <line x1="8" y1="11" x2="8" y2="15" />
-                </svg>
-                Commit
-              </button>
-              <button
-                className="code-toolbar-btn code-toolbar-btn--merge"
-                onClick={() => sendCommand('/ai-merge-back')}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="4" cy="4" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <path d="M4 6v2c0 2.2 1.8 4 4 4h2" />
-                </svg>
-                Merge
-              </button>
+              {voiceAvailable && (
+                <div ref={voiceDialogRef} style={{ position: 'relative' }}>
+                  <button
+                    className={`code-toolbar-btn code-toolbar-btn--voice${voiceDialogOpen ? ' code-toolbar-btn--voice-active' : ''}`}
+                    onClick={voiceDialogOpen ? closeVoiceDialog : openVoiceDialog}
+                    disabled={isConnecting}
+                  >
+                    {isRecording ? <VoiceBars volumeRef={volumeRef} isRecording={isRecording} /> : <MicIcon size={14} />}
+                  </button>
+                  {voiceDialogOpen && (
+                    <div className="code-voice-dialog">
+                      <textarea
+                        rows={6}
+                        value={voiceText}
+                        onChange={(e) => setVoiceText(e.target.value)}
+                        placeholder="Listening..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleVoiceSubmit();
+                          }
+                        }}
+                      />
+                      <div className="code-voice-dialog-footer">
+                        <button
+                          className={`code-voice-mic${isRecording ? ' code-voice-mic--recording' : ''}${isConnecting ? ' code-voice-mic--connecting' : ''}`}
+                          onClick={isRecording ? stopRecording : startRecording}
+                          disabled={isConnecting}
+                        >
+                          {isRecording ? <VoiceBars volumeRef={volumeRef} isRecording={isRecording} /> : <MicIcon size={14} />}
+                        </button>
+                        <button
+                          className="code-voice-submit"
+                          onClick={handleVoiceSubmit}
+                          disabled={!voiceText.trim()}
+                        >
+                          Submit
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <ToolbarCommandButton
+                codeWorkspaceId={codeWorkspaceId}
+                diffStats={diffStats}
+                onDiffStatsRefresh={onDiffStatsRefresh}
+                onShowDiff={onShowDiff}
+              />
               <button
                 className="code-toolbar-btn code-toolbar-btn--reconnect"
                 onClick={handleReconnect}
@@ -504,6 +767,130 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
           )}
         </div>
       </div>
+    </>
+  );
+}
+
+function ToolbarCommandButton({ codeWorkspaceId, diffStats, onDiffStatsRefresh, onShowDiff }) {
+  const [selectedCommand, setSelectedCommand] = useState('create-pr');
+  const [commandRunning, setCommandRunning] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [commandOutput, setCommandOutput] = useState('');
+  const [commandExitCode, setCommandExitCode] = useState(null);
+  const [dropupOpen, setDropupOpen] = useState(false);
+  const dropupRef = useRef(null);
+
+  // Close dropup on outside click
+  useEffect(() => {
+    if (!dropupOpen) return;
+    const handler = (e) => {
+      if (dropupRef.current && !dropupRef.current.contains(e.target)) setDropupOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropupOpen]);
+
+  const handleRun = useCallback(async () => {
+    if (commandRunning) return;
+
+    const fresh = await onDiffStatsRefresh?.();
+    const stats = fresh || diffStats;
+    if (!(stats?.insertions || 0) && !(stats?.deletions || 0)) {
+      setDialogOpen(true);
+      setCommandOutput('You have no changes.');
+      setCommandExitCode(1);
+      return;
+    }
+
+    setCommandRunning(true);
+    setDialogOpen(true);
+    setCommandOutput('');
+    setCommandExitCode(null);
+    try {
+      const { runWorkspaceCommand } = await import('./actions.js');
+      const result = await runWorkspaceCommand(codeWorkspaceId, selectedCommand);
+      setCommandOutput(result.output || result.message || '');
+      setCommandExitCode(result.exitCode ?? (result.success ? 0 : 1));
+      onDiffStatsRefresh?.();
+    } catch (err) {
+      setCommandOutput(err.message || 'Command failed');
+      setCommandExitCode(1);
+    } finally {
+      setCommandRunning(false);
+    }
+  }, [codeWorkspaceId, selectedCommand, commandRunning, diffStats, onDiffStatsRefresh]);
+
+  const handleDialogClose = useCallback(() => {
+    setDialogOpen(false);
+  }, []);
+
+  return (
+    <>
+      <button
+        className="code-toolbar-btn code-toolbar-btn--diff"
+        onClick={onShowDiff}
+      >
+        <span style={{ color: '#73da95' }}>+{diffStats?.insertions ?? 0}</span>
+        <span style={{ color: '#ef4444' }}>-{diffStats?.deletions ?? 0}</span>
+      </button>
+      <div style={{ position: 'relative' }} ref={dropupRef}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button
+            className="code-toolbar-btn code-toolbar-btn--command"
+            style={{ borderRadius: '6px 0 0 6px' }}
+            onClick={handleRun}
+            disabled={commandRunning}
+          >
+            {commandRunning ? (
+              <><SpinnerIcon size={12} /> Running...</>
+            ) : (
+              COMMAND_LABELS[selectedCommand]
+            )}
+          </button>
+          <button
+            className="code-toolbar-btn--command-chevron"
+            onClick={() => setDropupOpen((v) => !v)}
+            disabled={commandRunning}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 10 8 6 12 10" />
+            </svg>
+          </button>
+        </div>
+        {dropupOpen && (
+          <div className="code-toolbar-dropup">
+            {['commit', 'push', 'create-pr'].map((cmd) => (
+              <button
+                key={cmd}
+                className="code-toolbar-dropup-item"
+                onClick={() => { setSelectedCommand(cmd); setDropupOpen(false); }}
+              >
+                {COMMAND_LABELS[cmd]}
+              </button>
+            ))}
+            <div className="code-toolbar-dropup-separator" />
+            {['rebase', 'resolve-conflicts'].map((cmd) => (
+              <button
+                key={cmd}
+                className="code-toolbar-dropup-item"
+                onClick={() => { setSelectedCommand(cmd); setDropupOpen(false); }}
+              >
+                {COMMAND_LABELS[cmd]}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {dialogOpen && (
+        <CommandOutputDialog
+          title={COMMAND_LABELS[selectedCommand]}
+          output={commandOutput}
+          exitCode={commandExitCode}
+          running={commandRunning}
+          onClose={handleDialogClose}
+        />
+      )}
     </>
   );
 }

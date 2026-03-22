@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
@@ -22,6 +22,7 @@ import {
 
 const TerminalView = dynamic(() => import('./terminal-view.js'), { ssr: false });
 const EditorView = dynamic(() => import('./editor-view.js'), { ssr: false });
+const DiffViewer = dynamic(() => import('../chat/components/diff-viewer.js').then(m => ({ default: m.DiffViewer })), { ssr: false });
 
 function getStorageKey(id) {
   return `code-tab-order-${id}`;
@@ -91,6 +92,33 @@ export default function CodePage({ session, codeWorkspaceId }) {
   const [creatingCode, setCreatingCode] = useState(false);
   const [creatingEditor, setCreatingEditor] = useState(false);
   const [closingTabId, setClosingTabId] = useState(null);
+  const [diffStats, setDiffStats] = useState(null);
+  const [showDiff, setShowDiff] = useState(false);
+
+  const fetchDiffStats = useCallback(async () => {
+    try {
+      const r = await fetch(`/stream/workspace-diff/${codeWorkspaceId}`);
+      const data = await r.json();
+      if (data.success) { setDiffStats(data); return data; }
+    } catch {}
+    return null;
+  }, [codeWorkspaceId]);
+
+  // Polling: fetch on mount + every 30s
+  useEffect(() => {
+    fetchDiffStats();
+    const interval = setInterval(fetchDiffStats, 30000);
+    return () => clearInterval(interval);
+  }, [fetchDiffStats]);
+
+  // Debounce on terminal output: ANY tab's output resets the same timer
+  const debounceRef = useRef(null);
+  const handleTerminalOutput = useCallback(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(fetchDiffStats, 4000);
+  }, [fetchDiffStats]);
+
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -292,6 +320,9 @@ export default function CodePage({ session, codeWorkspaceId }) {
                 </div>
               )}
 
+              {/* Divider between real tabs and + buttons */}
+              <div className="self-stretch my-1.5 mx-1 w-px bg-border/60" />
+
               {/* + buttons */}
               <button
                 className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium font-mono text-muted-foreground hover:text-foreground rounded-t-md border-t border-x border-dashed border-t-muted-foreground/30 border-x-muted-foreground/20 hover:border-t-muted-foreground/50 hover:border-x-muted-foreground/40 transition-all disabled:opacity-50 disabled:cursor-default"
@@ -320,33 +351,44 @@ export default function CodePage({ session, codeWorkspaceId }) {
             </div>
 
             {/* Tab content panels — all mounted, hidden via display */}
-            {tabs.map((tab) => (
-              <div
-                key={tab.id}
-                style={{
-                  display: activeTabId === tab.id ? 'flex' : 'none',
-                  flex: 1,
-                  flexDirection: 'column',
-                  minHeight: 0,
-                }}
-              >
-                {tab.type === 'editor' ? (
-                  <EditorView codeWorkspaceId={codeWorkspaceId} tabId={tab.id} isActive={activeTabId === tab.id} />
-                ) : (
-                  <TerminalView
-                    codeWorkspaceId={codeWorkspaceId}
-                    wsPath={tab.primary
-                      ? `/code/${codeWorkspaceId}/ws`
-                      : `/code/${codeWorkspaceId}/term/${tab.id}/ws`}
-                    isActive={activeTabId === tab.id}
-                    showToolbar={true}
-                    ensureContainer={tab.primary ? ensureCodeWorkspaceContainer : undefined}
-                    onCloseSession={tab.primary ? handleOpenCloseDialog : () => setClosingTabId(tab.id)}
-                    closeLabel={tab.primary ? 'Close Session' : 'Close Tab'}
-                  />
-                )}
-              </div>
-            ))}
+            <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {showDiff && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', flexDirection: 'column' }}>
+                  <DiffViewer workspaceId={codeWorkspaceId} diffStats={diffStats} onClose={() => setShowDiff(false)} />
+                </div>
+              )}
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  style={{
+                    display: activeTabId === tab.id ? 'flex' : 'none',
+                    flex: 1,
+                    flexDirection: 'column',
+                    minHeight: 0,
+                  }}
+                >
+                  {tab.type === 'editor' ? (
+                    <EditorView codeWorkspaceId={codeWorkspaceId} tabId={tab.id} isActive={activeTabId === tab.id} />
+                  ) : (
+                    <TerminalView
+                      codeWorkspaceId={codeWorkspaceId}
+                      wsPath={tab.primary
+                        ? `/code/${codeWorkspaceId}/ws`
+                        : `/code/${codeWorkspaceId}/term/${tab.id}/ws`}
+                      isActive={activeTabId === tab.id}
+                      showToolbar={true}
+                      ensureContainer={tab.primary ? ensureCodeWorkspaceContainer : undefined}
+                      onCloseSession={tab.primary ? handleOpenCloseDialog : () => setClosingTabId(tab.id)}
+                      closeLabel={tab.primary ? 'Close Session' : 'Close Tab'}
+                      diffStats={diffStats}
+                      onDiffStatsRefresh={fetchDiffStats}
+                      onShowDiff={() => setShowDiff(true)}
+                      onTerminalOutput={handleTerminalOutput}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
           {dialogState === 'confirm' && (
             <ConfirmDialog
@@ -397,7 +439,7 @@ function PinnedTab({ tab, isActive, onClick, onClose, closeTitle }) {
         'group flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono rounded-t-md border border-b-0 transition-colors cursor-pointer',
         isActive
           ? 'bg-background text-foreground border-border -mb-px'
-          : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
+          : 'bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-muted/70'
       )}
       onClick={onClick}
     >
@@ -437,7 +479,7 @@ function SortableTab({ tab, isActive, onClick, onClose }) {
         'group flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono rounded-t-md border border-b-0 transition-colors cursor-grab active:cursor-grabbing',
         isActive
           ? 'bg-background text-foreground border-border -mb-px'
-          : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
+          : 'bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-muted/70'
       )}
       onClick={onClick}
     >
